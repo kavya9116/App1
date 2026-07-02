@@ -1,493 +1,160 @@
 import streamlit as st
 import yfinance as yf
-import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime
-# ----------------------------------------------------
-# PAGE CONFIG
-# ----------------------------------------------------
 
 st.set_page_config(
     page_title="Global Stock Dashboard",
     page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# ----------------------------------------------------
-# CUSTOM CSS
-# ----------------------------------------------------
-
+# --------------------------
+# Custom CSS
+# --------------------------
 st.markdown("""
 <style>
-
-.main {
-    background-color: #0E1117;
+.main{
+    background-color:#0f172a;
 }
-
-.metric-card{
-    background:#161B22;
+div[data-testid="metric-container"]{
+    background:#1e293b;
     padding:20px;
-    border-radius:12px;
-    text-align:center;
-    box-shadow:0px 0px 10px rgba(255,255,255,0.05);
+    border-radius:15px;
+    border:1px solid #334155;
 }
-
-.metric-title{
-    font-size:15px;
-    color:#AAAAAA;
-}
-
-.metric-value{
-    font-size:28px;
-    font-weight:bold;
-    color:white;
-}
-
-.big-font{
-    font-size:42px;
+.stButton>button{
+    width:100%;
+    border-radius:10px;
+    height:3em;
     font-weight:bold;
 }
-
-.small-font{
-    color:#00C853;
-    font-size:18px;
-}
-
-footer{
-    visibility:hidden;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-# ----------------------------------------------------
-# TITLE
-# ----------------------------------------------------
+st.title("📈 Global Stock Market Dashboard")
 
-st.title("📈 Global Stock Dashboard")
-st.caption("Powered by Yahoo Finance")
+st.write("Search any stock listed on Yahoo Finance and view live price with interactive historical charts.")
 
-# ----------------------------------------------------
-# SIDEBAR
-# ----------------------------------------------------
+# --------------------------
+# Popular Stocks
+# --------------------------
 
-st.sidebar.header("Search Stock")
-
-suggestions = {
+popular = {
     "Apple": "AAPL",
     "Microsoft": "MSFT",
-    "Tesla": "TSLA",
     "Amazon": "AMZN",
     "Google": "GOOGL",
-    "NVIDIA": "NVDA",
+    "Tesla": "TSLA",
     "Meta": "META",
+    "NVIDIA": "NVDA",
+    "Netflix": "NFLX",
+    "Toyota": "7203.T",
     "Reliance": "RELIANCE.NS",
     "TCS": "TCS.NS",
-    "Infosys": "INFY.NS",
-    "HDFC Bank": "HDFCBANK.NS"
+    "Infosys": "INFY.NS"
 }
 
-company = st.sidebar.selectbox(
-    "Suggested Stocks",
-    list(suggestions.keys())
-)
+col1,col2=st.columns([2,1])
 
-default_symbol = suggestions[company]
-
-symbol = st.sidebar.text_input(
-    "Or Enter Symbol",
-    value=default_symbol
-).upper()
-
-# ----------------------------------------------------
-# TIME PERIOD
-# ----------------------------------------------------
-
-period = st.sidebar.radio(
-    "Time Period",
-    [
-        "1d",
-        "5d",
-        "1mo",
-        "6mo",
-        "1y",
-        "5y",
-        "max"
-    ]
-)
-
-# ----------------------------------------------------
-# CACHE DATA
-# ----------------------------------------------------
-
-@st.cache_data(ttl=300)
-def load_stock(symbol):
-
-    ticker = yf.Ticker(symbol)
-
-    info = ticker.info
-
-    history = ticker.history(period=period)
-
-    return ticker, info, history
-
-# ----------------------------------------------------
-# FORMAT LARGE NUMBERS
-# ----------------------------------------------------
-
-def human_format(num):
-
-    if num is None:
-        return "N/A"
-
-    num = float(num)
-
-    magnitude = 0
-
-    while abs(num) >= 1000:
-
-        magnitude += 1
-
-        num /= 1000.0
-
-    return "%.2f%s" % (
-        num,
-        ['', 'K', 'M', 'B', 'T'][magnitude]
+with col1:
+    symbol=st.text_input(
+        "Enter Yahoo Finance Stock Symbol",
+        value="AAPL"
     )
 
-# ----------------------------------------------------
-# LOAD DATA
-# ----------------------------------------------------
+with col2:
+    suggestion=st.selectbox(
+        "Popular Stocks",
+        list(popular.keys())
+    )
 
-with st.spinner("Fetching data from Yahoo Finance..."):
+if st.button("Use Selected Suggestion"):
+    symbol=popular[suggestion]
 
-    try:
+# --------------------------
+# Time Period
+# --------------------------
 
-        ticker, info, history = load_stock(symbol)
+period=st.selectbox(
+    "Select Time Period",
+    ["1d","5d","1mo","3mo","6mo","1y","2y","5y","max"]
+)
 
-    except Exception:
+# --------------------------
+# Download Data
+# --------------------------
 
-        st.error("Unable to fetch stock data.")
+try:
 
+    ticker=yf.Ticker(symbol)
+
+    info=ticker.info
+
+    hist=ticker.history(period=period)
+
+    if hist.empty:
+        st.error("No data available.")
         st.stop()
 
-if history.empty:
+    current_price=info.get("currentPrice")
 
-    st.error("Invalid stock symbol.")
+    previous_close=info.get("previousClose")
 
-    st.stop()
-  # ----------------------------------------------------
-# COMPANY INFORMATION
-# ----------------------------------------------------
+    change=current_price-previous_close
 
-company_name = info.get("longName", symbol)
-sector = info.get("sector", "N/A")
-industry = info.get("industry", "N/A")
-website = info.get("website", "N/A")
+    percent=(change/previous_close)*100
 
-current_price = info.get(
-    "currentPrice",
-    info.get("regularMarketPrice", 0)
-)
+    c1,c2,c3=st.columns(3)
 
-previous_close = info.get("previousClose", 0)
-open_price = info.get("open", 0)
-day_high = info.get("dayHigh", 0)
-day_low = info.get("dayLow", 0)
-volume = info.get("volume", 0)
-market_cap = info.get("marketCap", 0)
-
-# ----------------------------------------------------
-# PRICE CHANGE
-# ----------------------------------------------------
-
-change = current_price - previous_close
-
-if previous_close:
-    percent_change = (change / previous_close) * 100
-else:
-    percent_change = 0
-
-if change >= 0:
-    arrow = "▲"
-    color = "#00C853"
-else:
-    arrow = "▼"
-    color = "#FF5252"
-
-# ----------------------------------------------------
-# HEADER
-# ----------------------------------------------------
-
-st.markdown(f"## {company_name}")
-
-col1, col2 = st.columns([3, 1])
-
-with col1:
-
-    st.markdown(
-        f"""
-        <div class="big-font">
-            ${current_price:.2f}
-        </div>
-
-        <div style="font-size:20px;color:{color};">
-            {arrow} {change:.2f} ({percent_change:.2f}%)
-        </div>
-        """,
-        unsafe_allow_html=True
+    c1.metric(
+        "Current Price",
+        f"${current_price:,.2f}",
+        f"{percent:.2f}%"
     )
 
-with col2:
-
-    st.metric(
-        label="Symbol",
-        value=symbol
-    )
-
-# ----------------------------------------------------
-# COMPANY DETAILS
-# ----------------------------------------------------
-
-st.write(f"**Sector:** {sector}")
-st.write(f"**Industry:** {industry}")
-
-if website != "N/A":
-    st.markdown(f"🌐 {website}")
-
-st.divider()
-
-# ----------------------------------------------------
-# METRIC CARDS
-# ----------------------------------------------------
-
-c1, c2, c3, c4 = st.columns(4)
-
-with c1:
-    st.metric(
+    c2.metric(
         "Previous Close",
-        f"${previous_close:.2f}"
+        f"${previous_close:,.2f}"
     )
 
-with c2:
-    st.metric(
-        "Open",
-        f"${open_price:.2f}"
-    )
-
-with c3:
-    st.metric(
-        "Day High",
-        f"${day_high:.2f}"
-    )
-
-with c4:
-    st.metric(
-        "Day Low",
-        f"${day_low:.2f}"
-    )
-
-st.write("")
-
-c5, c6, c7 = st.columns(3)
-
-with c5:
-    st.metric(
-        "Volume",
-        human_format(volume)
-    )
-
-with c6:
-    st.metric(
+    c3.metric(
         "Market Cap",
-        human_format(market_cap)
+        f"{info.get('marketCap',0):,}"
     )
 
-with c7:
+    st.subheader(info.get("longName",""))
 
-    avg_volume = info.get("averageVolume", None)
+    st.write(info.get("longBusinessSummary","No Description Available"))
 
-    if avg_volume:
-        st.metric(
-            "Avg Volume",
-            human_format(avg_volume)
+    fig=go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=hist.index,
+            y=hist["Close"],
+            mode="lines",
+            line=dict(width=3)
         )
-    else:
-        st.metric(
-            "Avg Volume",
-            "N/A"
-        )
-
-st.divider()
-
-# ----------------------------------------------------
-# COMPANY DESCRIPTION
-# ----------------------------------------------------
-
-description = info.get("longBusinessSummary", "")
-
-if description:
-
-    st.subheader("About the Company")
-
-    st.write(description)
-
-st.divider()
-# ----------------------------------------------------
-# COMPANY INFORMATION
-# ----------------------------------------------------
-
-company_name = info.get("longName", symbol)
-sector = info.get("sector", "N/A")
-industry = info.get("industry", "N/A")
-website = info.get("website", "N/A")
-
-current_price = info.get(
-    "currentPrice",
-    info.get("regularMarketPrice", 0)
-)
-
-previous_close = info.get("previousClose", 0)
-open_price = info.get("open", 0)
-day_high = info.get("dayHigh", 0)
-day_low = info.get("dayLow", 0)
-volume = info.get("volume", 0)
-market_cap = info.get("marketCap", 0)
-
-# ----------------------------------------------------
-# PRICE CHANGE
-# ----------------------------------------------------
-
-change = current_price - previous_close
-
-if previous_close:
-    percent_change = (change / previous_close) * 100
-else:
-    percent_change = 0
-
-if change >= 0:
-    arrow = "▲"
-    color = "#00C853"
-else:
-    arrow = "▼"
-    color = "#FF5252"
-
-# ----------------------------------------------------
-# HEADER
-# ----------------------------------------------------
-
-st.markdown(f"## {company_name}")
-
-col1, col2 = st.columns([3, 1])
-
-with col1:
-
-    st.markdown(
-        f"""
-        <div class="big-font">
-            ${current_price:.2f}
-        </div>
-
-        <div style="font-size:20px;color:{color};">
-            {arrow} {change:.2f} ({percent_change:.2f}%)
-        </div>
-        """,
-        unsafe_allow_html=True
     )
 
-with col2:
-
-    st.metric(
-        label="Symbol",
-        value=symbol
+    fig.update_layout(
+        title=f"{symbol} Price Chart",
+        xaxis_title="Date",
+        yaxis_title="Price",
+        template="plotly_dark",
+        height=600
     )
 
-# ----------------------------------------------------
-# COMPANY DETAILS
-# ----------------------------------------------------
+    st.plotly_chart(fig,use_container_width=True)
 
-st.write(f"**Sector:** {sector}")
-st.write(f"**Industry:** {industry}")
+    st.subheader("Historical Data")
 
-if website != "N/A":
-    st.markdown(f"🌐 {website}")
+    st.dataframe(hist)
 
-st.divider()
+except Exception as e:
+    st.error(e)
 
-# ----------------------------------------------------
-# METRIC CARDS
-# ----------------------------------------------------
+st.sidebar.header("Popular Global Stocks")
 
-c1, c2, c3, c4 = st.columns(4)
-
-with c1:
-    st.metric(
-        "Previous Close",
-        f"${previous_close:.2f}"
-    )
-
-with c2:
-    st.metric(
-        "Open",
-        f"${open_price:.2f}"
-    )
-
-with c3:
-    st.metric(
-        "Day High",
-        f"${day_high:.2f}"
-    )
-
-with c4:
-    st.metric(
-        "Day Low",
-        f"${day_low:.2f}"
-    )
-
-st.write("")
-
-c5, c6, c7 = st.columns(3)
-
-with c5:
-    st.metric(
-        "Volume",
-        human_format(volume)
-    )
-
-with c6:
-    st.metric(
-        "Market Cap",
-        human_format(market_cap)
-    )
-
-with c7:
-
-    avg_volume = info.get("averageVolume", None)
-
-    if avg_volume:
-        st.metric(
-            "Avg Volume",
-            human_format(avg_volume)
-        )
-    else:
-        st.metric(
-            "Avg Volume",
-            "N/A"
-        )
-
-st.divider()
-
-# ----------------------------------------------------
-# COMPANY DESCRIPTION
-# ----------------------------------------------------
-
-description = info.get("longBusinessSummary", "")
-
-if description:
-
-    st.subheader("About the Company")
-
-    st.write(description)
-
-st.divider()
+for k,v in popular.items():
+    st.sidebar.write(f"**{k}** : `{v}`")
