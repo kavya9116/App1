@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # --- Page Configuration & Styling ---
 st.set_page_config(
@@ -54,12 +54,14 @@ st.sidebar.markdown("### Quick Recommendations")
 for label, sym in SUGGESTIONS.items():
     if st.sidebar.button(f"🏢 {label} ({sym})", use_container_width=True):
         st.session_state["ticker_input"] = sym
+        # Force a rerun to instantly update the text field value
+        st.rerun()
 
 # Main Text Input for Ticker Search
 ticker_symbol = st.sidebar.text_input(
     "Enter Global Ticker Symbol Manually", 
     value=st.session_state["ticker_input"]
-).get(st.session_state["ticker_input"]).upper().strip()
+).upper().strip()
 
 # Period configuration mappings
 time_frames = {
@@ -75,13 +77,11 @@ time_frames = {
 selected_tf = st.sidebar.selectbox("Select Time Horizon", list(time_frames.keys()), index=2)
 
 # --- Data Fetching Logic (Cached for Performance) ---
-@st.cache_data(ttl=60)  # Cache data for 1 minute to remain responsive but optimized
+@st.cache_data(ttl=60)  # Cache data for 1 minute
 def load_stock_data(ticker, period, interval):
     try:
         stock = yf.Ticker(ticker)
-        # Fetch history
         hist = stock.history(period=period, interval=interval)
-        # Fetch basic metadata securely via a clean dict fallback structure
         info = stock.info
         return hist, info, None
     except Exception as e:
@@ -121,9 +121,13 @@ if ticker_symbol:
             value=f"{current_price:,.2f} {currency}", 
             delta=f"{price_change:+.2f} ({price_change_pct:+.2f}%)"
         )
-        m_col2.metric(label="Session High", value=f"{hist_data['High'].max():,.2f} {currency}")
-        m_col3.metric(label="Session Low", value=f"{hist_data['Low'].min():,.2f} {currency}")
-        m_col4.metric(label="Market Cap", value=f"{stock_info.get('marketCap', 0):,} {currency}" if stock_info.get('marketCap') else "N/A")
+        m_col2.metric(label="Period High", value=f"{hist_data['High'].max():,.2f} {currency}")
+        m_col3.metric(label="Period Low", value=f"{hist_data['Low'].min():,.2f} {currency}")
+        
+        # Format Market Cap cleanly
+        m_cap = stock_info.get('marketCap')
+        m_cap_str = f"{m_cap:,} {currency}" if m_cap else "N/A"
+        m_col4.metric(label="Market Cap", value=m_cap_str)
 
         # --- Charts Area ---
         st.markdown(f"### Interactive Price Chart — `{selected_tf}` View")
